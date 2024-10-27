@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-pass
+type: Opaque
+data:
+  password: UGFzc3dvcmQxMjM=
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ghost-mysql
+  labels:
+    app: ghost
+spec:
+  type: ClusterIP
+  ports:
+  - protocol: TCP
+    port: 3306
+  selector:
+    app: ghost
+    tier: mysql
+  clusterIP: 10.109.170.21
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ghostsql-pv-claim
+  namespace: oppg3
+  labels:
+    app: ghost
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ghost-mysql
+  labels:
+    app: ghost
+spec:
+  selector:
+    matchLabels:
+      app: ghost
+      tier: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ghost
+        tier: mysql
+    spec:
+      containers:
+      - image: mysql:latest
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-pass
+              key: password
+        ports:
+        - containerPort: 3306
+          name: mysql
+        readinessProbe:
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: ghostsql-pv-claim
